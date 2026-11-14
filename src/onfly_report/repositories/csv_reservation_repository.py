@@ -36,16 +36,16 @@ class CsvReservationRepository:
     def read(self) -> list[RawRow]:
         try:
             with self._path.open("r", encoding="utf-8", newline="") as handle:
-                reader = csv.DictReader(handle)
-                missing = [column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])]
+                reader = csv.DictReader(handle, skipinitialspace=True)
+                fieldnames = [name.strip() for name in (reader.fieldnames or [])]
+                reader.fieldnames = fieldnames
+                missing = [column for column in REQUIRED_COLUMNS if column not in fieldnames]
                 if missing:
                     raise InputFileError(f"colunas obrigatórias ausentes: {', '.join(missing)}")
 
                 rows: list[RawRow] = []
                 for values in reader:
                     rows.append(RawRow(line_number=reader.line_num, values=values))
-                    if len(rows) == 200:
-                        break
                 return rows
         except FileNotFoundError as err:
             raise InputFileError(f"arquivo de reservas não encontrado: {self._path}") from err
