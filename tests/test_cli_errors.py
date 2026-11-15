@@ -78,8 +78,42 @@ def test_invalid_input_exits_with_code_2_without_writing_report(tmp_path, prepar
     assert "Traceback" not in process.stderr
 
 
-def test_unexpected_error_exits_with_code_1(tmp_path, monkeypatch):
-    """Falha não prevista na geração do relatório devolve 1 e não grava saída."""
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        pytest.param("amount", "cem reais", id="valor"),
+        pytest.param("rooms", "dois", id="quartos"),
+        pytest.param("checkin_date", "2025-02-30", id="data"),
+    ],
+)
+def test_invalid_value_message_points_to_line_and_column(tmp_path, column, value):
+    """A mensagem de valor inválido indica a linha física, a coluna e o valor recebido."""
+    input_csv = write_reservations(tmp_path / "reservas.csv", [{"reservation_id": "R-1"}, {column: value}])
+    rates_csv = write_rates(tmp_path / "rates.csv")
+    output = tmp_path / "report.json"
+
+    process = run_cli_process(["--input", str(input_csv), "--rates", str(rates_csv), "--output", str(output)])
+
+    assert process.returncode == 2, process.stderr
+    assert f"linha 3: valor inválido em {column}: '{value}'" in process.stderr
+
+
+def test_unwritable_output_exits_with_code_1_and_clear_message(tmp_path):
+    """Falha ao gravar o relatório (aqui, `--output` é um diretório) devolve 1 com mensagem, sem traceback."""
+    input_csv = write_reservations(tmp_path / "reservas.csv", [{}])
+    rates_csv = write_rates(tmp_path / "rates.csv")
+    output_dir = tmp_path / "saida"
+    output_dir.mkdir()
+
+    process = run_cli_process(["--input", str(input_csv), "--rates", str(rates_csv), "--output", str(output_dir)])
+
+    assert process.returncode == 1
+    assert "não foi possível gravar o relatório" in process.stderr
+    assert "Traceback" not in process.stderr
+
+
+def test_unexpected_error_exits_with_code_1(tmp_path, monkeypatch, caplog):
+    """Falha não prevista na geração do relatório devolve 1, registra o erro e não grava saída."""
 
     def fail(self):
         raise RuntimeError("falha simulada")
@@ -93,3 +127,4 @@ def test_unexpected_error_exits_with_code_1(tmp_path, monkeypatch):
 
     assert exit_code == 1
     assert not output.exists()
+    assert "erro inesperado" in caplog.text

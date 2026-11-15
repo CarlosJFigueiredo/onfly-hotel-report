@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from ..exceptions import InputFileError
+from ..exceptions import MissingRateError
 
 
 def convert_to_brl(amount: Decimal, currency: str, rates: dict[str, Decimal]) -> Decimal:
     """Converte um valor na moeda informada para BRL usando a taxa da tabela."""
     if currency not in rates:
-        raise InputFileError(f"moeda sem taxa de câmbio: {currency}")
+        raise MissingRateError(currency, rates.keys())
     return amount * rates[currency]
