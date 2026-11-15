@@ -7,13 +7,17 @@ import json
 import logging
 from pathlib import Path
 
-from .exceptions import InputFileError
+from .exceptions import DomainError
 from .logging_config import configure_logging
 from .repositories.csv_rate_repository import CsvRateRepository
 from .repositories.csv_reservation_repository import CsvReservationRepository
 from .services.report_builder import ReportBuilder
 
 logger = logging.getLogger("onfly_report")
+
+EXIT_OK = 0
+EXIT_UNEXPECTED_ERROR = 1
+EXIT_INVALID_INPUT = 2  # mesmo código que o argparse usa para argumento inválido
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,12 +46,12 @@ def main(argv: list[str] | None = None) -> int:
             rate_repository=CsvRateRepository(Path(args.rates)),
             top_n=args.top,
         ).build()
-    except InputFileError as err:
-        logger.error("falha ao ler a entrada: %s", err)
-        return 2
+    except DomainError as err:
+        logger.error("entrada inválida: %s", err)
+        return EXIT_INVALID_INPUT
     except Exception:
         logger.exception("erro inesperado ao gerar o relatório")
-        return 1
+        return EXIT_UNEXPECTED_ERROR
 
     output_path = Path(args.output)
     try:
@@ -56,9 +60,9 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(report, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-    except OSError:
-        logger.exception("falha ao escrever o relatório em %s", output_path)
-        return 1
+    except OSError as err:
+        logger.error("não foi possível gravar o relatório em %s: %s", output_path, err.strerror or err)
+        return EXIT_UNEXPECTED_ERROR
 
     summary = report["summary"]
     print(
@@ -69,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
             amount=summary["total_amount_brl"],
         )
     )
-    return 0
+    return EXIT_OK
 
 
 if __name__ == "__main__":

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 
-from ..exceptions import InputFileError
 from ..models import RawRow
+from ._csv import read_csv
 
 REQUIRED_COLUMNS = (
     "reservation_id",
@@ -34,20 +33,4 @@ class CsvReservationRepository:
         self._path = path
 
     def read(self) -> list[RawRow]:
-        try:
-            with self._path.open("r", encoding="utf-8", newline="") as handle:
-                reader = csv.DictReader(handle)
-                missing = [column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])]
-                if missing:
-                    raise InputFileError(f"colunas obrigatórias ausentes: {', '.join(missing)}")
-
-                rows: list[RawRow] = []
-                for values in reader:
-                    rows.append(RawRow(line_number=reader.line_num, values=values))
-                    if len(rows) == 200:
-                        break
-                return rows
-        except FileNotFoundError as err:
-            raise InputFileError(f"arquivo de reservas não encontrado: {self._path}") from err
-        except (OSError, csv.Error) as err:
-            raise InputFileError(f"falha ao ler {self._path}: {err}") from err
+        return read_csv(self._path, REQUIRED_COLUMNS)

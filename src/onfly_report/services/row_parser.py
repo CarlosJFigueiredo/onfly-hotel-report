@@ -2,11 +2,28 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import TypeVar
 
 from ..exceptions import InputFileError
 from ..models import RawRow, Reservation
+
+T = TypeVar("T")
+
+
+def _text(raw: RawRow, column: str) -> str:
+    return (raw.values.get(column) or "").strip()
+
+
+def _convert(raw: RawRow, column: str, convert: Callable[[str], T]) -> T:
+    """Converte o valor da coluna; a falha indica linha, coluna e valor recebido."""
+    value = _text(raw, column)
+    try:
+        return convert(value)
+    except (ValueError, InvalidOperation) as err:
+        raise InputFileError(f"linha {raw.line_number}: valor inválido em {column}: {value!r}") from err
 
 
 class RowParser:
@@ -17,24 +34,20 @@ class RowParser:
     """
 
     def parse(self, raw: RawRow) -> Reservation:
-        values = raw.values
-        try:
-            return Reservation(
-                reservation_id=(values.get("reservation_id") or "").strip(),
-                traveler_name=(values.get("traveler_name") or "").strip(),
-                company_id=(values.get("company_id") or "").strip(),
-                hotel_id=(values.get("hotel_id") or "").strip(),
-                hotel_name=(values.get("hotel_name") or "").strip(),
-                city=(values.get("city") or "").strip(),
-                country=(values.get("country") or "").strip(),
-                checkin=date.fromisoformat((values.get("checkin_date") or "").strip()),
-                checkout=date.fromisoformat((values.get("checkout_date") or "").strip()),
-                rooms=int((values.get("rooms") or "").strip()),
-                status=(values.get("status") or "").strip(),
-                currency=(values.get("currency") or "").strip(),
-                amount=Decimal((values.get("amount") or "").strip()),
-                payment_method=(values.get("payment_method") or "").strip(),
-                line_number=raw.line_number,
-            )
-        except (ValueError, InvalidOperation) as err:
-            raise InputFileError(f"linha {raw.line_number} inválida: {err}") from err
+        return Reservation(
+            reservation_id=_text(raw, "reservation_id"),
+            traveler_name=_text(raw, "traveler_name"),
+            company_id=_text(raw, "company_id"),
+            hotel_id=_text(raw, "hotel_id"),
+            hotel_name=_text(raw, "hotel_name"),
+            city=_text(raw, "city"),
+            country=_text(raw, "country"),
+            checkin=_convert(raw, "checkin_date", date.fromisoformat),
+            checkout=_convert(raw, "checkout_date", date.fromisoformat),
+            rooms=_convert(raw, "rooms", int),
+            status=_text(raw, "status"),
+            currency=_text(raw, "currency").upper(),
+            amount=_convert(raw, "amount", Decimal),
+            payment_method=_text(raw, "payment_method"),
+            line_number=raw.line_number,
+        )
